@@ -4,11 +4,11 @@ import ActionsPanel from "./components/actions-panel";
 import QuoteCell from "./components/quote-cell";
 import QuoteDetails from "./components/quote-details";
 import Toast from "./components/toast";
+import { useSearchParams } from "react-router";
 
 // Cache
 const quotesCache: Map<number, Promise<Map<number, Quote>>> = new Map();
-// Toggle artificial delay in fetching quotes
-const TOGGLE_DELAY = false;
+
 // Max Pages
 const maxPages = 10;
 // Max Items Per Page
@@ -21,6 +21,10 @@ interface Quote {
 }
 
 export function Welcome() {
+  const [searchParams] = useSearchParams();
+  // Toggle artificial delay in fetching quotes
+  const TOGGLE_DELAY = searchParams.get("delay") === "false" ? false : true;
+
   const [toast, setToast] = useState<string | null>(null);
   const [focusedCell, setFocusedCell] = useState<number | null>(null);
   const [selectedCells, setSelectedCells] = useState<Set<number>>(new Set());
@@ -46,19 +50,24 @@ export function Welcome() {
         // Add promise onto the stack in case multiple calls to the set page occur
         quotesCache.set(
           randomPg,
-          new Promise(async (resolve) => {
+          new Promise(async (resolve, reject) => {
             const res = await fetch(url);
             if (!res.ok) {
               console.log(`HTTP error ${res.status}: ${res.statusText}`);
-              setToast(
-                "Problem retrieving quotes make sure the remote server is running"
-              );
+              quotesCache.delete(randomPg);
+              const err =
+                "Problem retrieving quotes make sure the remote server is running and hit space again";
+              setToast(err);
+              reject();
+              return { error: err };
             }
 
             const pgMap: Map<number, Quote> = new Map();
 
             const data = await res.json();
             data.forEach((quote: Quote, i: number) => {
+              console.log("");
+              console.log(quote);
               pgMap.set(i, quote);
             });
 
@@ -67,7 +76,9 @@ export function Welcome() {
         );
       }
 
-      return (await quotesCache.get(randomPg))?.get(randomIndex);
+      const pgPromise = await quotesCache.get(randomPg);
+
+      return pgPromise?.get(randomIndex);
     } catch (err: any) {
       console.error("** Fetch Failed:", err?.message);
       return { error: err?.message };
@@ -94,11 +105,17 @@ export function Welcome() {
     }
 
     try {
-      const quote = await getRandomQuote();
+      const rndQuote = await getRandomQuote();
+      console.log(`::Quote::`);
+      console.log(rndQuote);
+      if (rndQuote) {
+        console.log("text" in rndQuote);
+      }
+
       // Set the final quote
       setCellContent((prev) => ({
         ...prev,
-        [cellIndex]: quote,
+        [cellIndex]: rndQuote && "text" in rndQuote ? rndQuote : null,
       }));
 
       // Clean up loading state
@@ -218,14 +235,12 @@ export function Welcome() {
           e.preventDefault();
           if (selectedCells.size > 0) {
             selectedCells.forEach((cellIndex) => {
-              const currentContent = cellContent[cellIndex] || "Empty";
-              if (currentContent === "Empty" && !loadingCells.has(cellIndex)) {
+              if (!loadingCells.has(cellIndex)) {
                 startLoadingSequence(cellIndex);
               }
             });
           } else if (focusedCell !== null) {
-            const currentContent = cellContent[focusedCell] || "Empty";
-            if (currentContent === "Empty" && !loadingCells.has(focusedCell)) {
+            if (!loadingCells.has(focusedCell)) {
               startLoadingSequence(focusedCell);
             }
           }
@@ -278,7 +293,6 @@ export function Welcome() {
           </div>
 
           {/* Right section - Details */}
-          {focusedCell}
           <QuoteDetails
             cellContent={focusedCell === null ? null : cellContent[focusedCell]}
           />

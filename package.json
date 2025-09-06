@@ -1,5 +1,5 @@
 {
-  "name": "quote-fetcher",
+  "name": "quote-fetcher-fe",
   "private": true,
   "type": "module",
   "scripts": {
